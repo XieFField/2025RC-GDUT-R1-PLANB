@@ -3,6 +3,7 @@
 #include "motor.h"
 #include "pid.h"
 #include "speed_plan.h"
+#include "Unitree_GO.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,8 @@ public:
     }
 
     Motor_C610 PushMotor[1] = {Motor_C610(6)};
+
+    GO_M8010 PitchMotor[1];
     
     VESC FrictionMotor[3] = {VESC(101), VESC(102), VESC(103)};
 

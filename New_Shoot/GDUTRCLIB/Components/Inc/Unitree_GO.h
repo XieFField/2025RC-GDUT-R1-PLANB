@@ -117,17 +117,54 @@ typedef struct motor_real_ref_data{
 /*----------------------------------function----------------------------------*/
 
 //宇树GO系列关节电机
-class GO_M8010 : public Motor_Speed
+class GO_M8010 : public Motor_Base
 {
 public:
     virtual MOTOR_FLAG GET_MOTOR_FLAG() const {return GO_MOTOR;}
-    GO_M8010(uint8_t id, uint32_t module_id)
-     : Motor_Speed(id){} //电机id
+    GO_M8010(uint8_t id, uint32_t module_id): Motor_Base(id){} //电机id
     virtual ~GO_M8010(){}
     
     //GO_M8010的电机更新函数
-    void update_GO1(uint8_t can_rx_data[], uint32_t data_id);
-    
+    void update(uint8_t can_rx_data[]) override
+    {
+    // 先根据低位1 来判断是什么接收数据模式
+        uint32_t data_id = (uint32_t)(GO_ReadData_ID() & 0x07FFFFFF);
+        if ((data_id & 0x3000000) == GO1_Rec_Data_Mode1) // 接收数据模式1
+        {
+            // 还需要根据最后一位是不是-128，来判断电机有无报错
+            if ((uint16_t)(data_id & 0xFF) == -128) 
+            {
+                // 电机发回来报错报文！
+                this->errorType_Get((data_id & 0xFF0000) >>
+                                    16); // 进行错误代号解析，具体看错误数据类型
+            } 
+            else 
+            {
+                // 电机正常发回来报文！这时记得存储温度
+                this->air_pressure_parameters_Get((uint16_t)((data_id & 0xFF0000) >> 16));
+                this->temperature_get((uint16_t)(data_id & 0xFF));
+            }
+            // 无论电机是否报错，都会发送回来数据段
+            this->cur_rec_data.T = (int16_t)(can_rx_data[7] << 8 | can_rx_data[6]);
+            this->cur_rec_data.W = (int16_t)(can_rx_data[5] << 8 | can_rx_data[4]);
+            this->cur_rec_data.Pos =
+                (int32_t)(can_rx_data[3] << 24 | can_rx_data[2] << 16 |
+                        can_rx_data[1] << 8 | can_rx_data[0]);
+        } 
+        else if ((data_id & 0x3000000) == GO1_Rec_Data_Mode2) // 接收数据模式2
+        {
+            // 对应指令下发中 模式12 ，读取Kpos 和 Kspd模式，因此只返回Kpos 和 Kspd
+            this->cur_rec_data.K_P = (int16_t)(can_rx_data[3] << 8 | can_rx_data[2]);
+            this->cur_rec_data.K_W = (int16_t)(can_rx_data[1] << 8 | can_rx_data[0]);
+        }
+        this->processRxMsg();
+    }
+
+    uint8_t GO_ReadData_ID(void)
+    {
+        return this->can_rx_for_motor.header.ExtId;
+    }
+
     /** 
      * @brief 力位混合控制接口
      *        每控制一次，就会返回一次数据，需要持续调用才能获取电机数据   
@@ -339,6 +376,7 @@ public:
         this->can_tx_for_motor.id = extID;
     }
     
+
     /*数据定义*/
     /* 期望和当前的真实速度 */
     motor_real_ref_data real_ref_data = {};
@@ -351,8 +389,9 @@ public:
 
     float air_pressure_parameters = 0;
     int temperature;
-    uint32_t module_id = 0;
     
+    uint32_t module_id = 0;
+
     CAN_RxBuffer can_rx_for_motor;
     CAN_TxMsg can_tx_for_motor;
 private:

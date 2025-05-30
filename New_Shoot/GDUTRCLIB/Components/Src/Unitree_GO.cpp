@@ -41,8 +41,6 @@ uint8_t GO_Motor_ID_CallBack(uint32_t motor_ID)
         return 1;
     else if (temp_motor_id == GO1_Motor_ID_2) 
         return 2;
-    else if (temp_motor_id == GO1_Motor_ID_3) 
-        return 3;
   return -2;
 }
 
@@ -194,37 +192,4 @@ void GO_M8010::GO_Motor_STOP()
     xQueueSend(CAN2_TxPort, &this->can_tx_for_motor, portMAX_DELAY);
 }
 
-// 在这里面，先将剩余扩展帧中的数据拿出来，判断接收模式，然后再进行对应的数据段解析
-void GO_M8010::update_GO1(uint8_t can_rx_data[], uint32_t data_id) 
-{
-    // 先根据低位1 来判断是什么接收数据模式
-    if ((data_id & 0x3000000) == GO1_Rec_Data_Mode1) // 接收数据模式1
-    {
-        // 还需要根据最后一位是不是-128，来判断电机有无报错
-        if ((uint16_t)(data_id & 0xFF) == -128) 
-        {
-            // 电机发回来报错报文！
-            this->errorType_Get((data_id & 0xFF0000) >>
-                                16); // 进行错误代号解析，具体看错误数据类型
-        } 
-        else 
-        {
-            // 电机正常发回来报文！这时记得存储温度
-            this->air_pressure_parameters_Get((uint16_t)((data_id & 0xFF0000) >> 16));
-            this->temperature_get((uint16_t)(data_id & 0xFF));
-        }
-        // 无论电机是否报错，都会发送回来数据段
-        this->cur_rec_data.T = (int16_t)(can_rx_data[7] << 8 | can_rx_data[6]);
-        this->cur_rec_data.W = (int16_t)(can_rx_data[5] << 8 | can_rx_data[4]);
-        this->cur_rec_data.Pos =
-            (int32_t)(can_rx_data[3] << 24 | can_rx_data[2] << 16 |
-                    can_rx_data[1] << 8 | can_rx_data[0]);
-    } 
-    else if ((data_id & 0x3000000) == GO1_Rec_Data_Mode2) // 接收数据模式2
-    {
-        // 对应指令下发中 模式12 ，读取Kpos 和 Kspd模式，因此只返回Kpos 和 Kspd
-        this->cur_rec_data.K_P = (int16_t)(can_rx_data[3] << 8 | can_rx_data[2]);
-        this->cur_rec_data.K_W = (int16_t)(can_rx_data[1] << 8 | can_rx_data[0]);
-    }
-    this->processRxMsg();
-}
+
